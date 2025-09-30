@@ -55,7 +55,7 @@ jobs:
       - setup_flutter
       - run:
           name: Format check
-          command: flutter format --dry-run --set-exit-if-changed .
+          command: dart format --output=none --set-exit-if-changed .
       - run:
           name: Analyze code
           command: flutter analyze --fatal-infos --fatal-warnings
