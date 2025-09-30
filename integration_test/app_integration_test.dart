@@ -11,9 +11,9 @@ class TestApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return const MaterialApp(
       title: 'Enterprise Flutter App',
-      home: const HomePage(),
+      home: HomePage(),
     );
   }
 }
@@ -121,7 +121,7 @@ void main() {
       expect(find.text('Login'), findsOneWidget);
 
       // Test multiple increments
-      for (int i = 0; i < 5; i++) {
+      for (var i = 0; i < 5; i++) {
         await tester.tap(find.byKey(const Key('increment_button')));
         await tester.pumpAndSettle();
       }
@@ -134,7 +134,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Rapid button presses
-      for (int i = 0; i < 10; i++) {
+      for (var i = 0; i < 10; i++) {
         await tester.tap(find.byKey(const Key('increment_button')));
       }
       await tester.pumpAndSettle();

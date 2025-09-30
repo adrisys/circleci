@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/mockito.dart';
 import 'package:mockito/annotations.dart';
+import 'package:mockito/mockito.dart';
 
 // Example unit test for authentication service
 // This demonstrates enterprise-level testing practices
@@ -15,15 +15,15 @@ abstract class AuthRepository {
 }
 
 class AuthService {
-  final AuthRepository _repository;
-
   AuthService(this._repository);
+  
+  final AuthRepository _repository;
 
   Future<bool> authenticate(String email, String password) async {
     if (email.isEmpty || password.isEmpty) {
       return false;
     }
-    return await _repository.login(email, password);
+    return _repository.login(email, password);
   }
 
   Future<void> signOut() async {
@@ -82,7 +82,7 @@ void main() {
         // Act & Assert
         expect(
           () async =>
-              await authService.authenticate('email@test.com', 'password'),
+              authService.authenticate('email@test.com', 'password'),
           throwsException,
         );
       });
