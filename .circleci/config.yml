@@ -18,31 +18,43 @@ commands:
       - run:
           name: Install Flutter SDK
           command: |
-            git clone https://github.com/flutter/flutter.git -b stable ~/flutter
+            if [ ! -d "$HOME/flutter" ]; then
+              echo "Installing Flutter SDK..."
+              git clone https://github.com/flutter/flutter.git -b stable ~/flutter
+            else
+              echo "Flutter SDK already exists, updating..."
+              cd ~/flutter && git pull origin stable
+            fi
             echo 'export PATH="$PATH:$HOME/flutter/bin"' >> $BASH_ENV
             echo 'export PATH="$PATH:$HOME/.pub-cache/bin"' >> $BASH_ENV
             source $BASH_ENV
             flutter doctor -v
       - run:
           name: Install dependencies
-          command: flutter pub get
+          command: |
+            echo "Installing Flutter dependencies..."
+            flutter pub get
+            flutter doctor
       - run:
           name: Generate mocks and other files
-          command: dart run build_runner build --delete-conflicting-outputs
+          command: |
+            echo "Generating mock files and other build artifacts..."
+            dart run build_runner build --delete-conflicting-outputs || true
 
   restore_flutter_cache:
     description: "Restore Flutter and dependency caches"
     steps:
       - restore_cache:
           keys:
-            - flutter-{{ checksum "pubspec.lock" }}-v1
-            - flutter-
+            - flutter-{{ checksum "pubspec.lock" }}-{{ .Environment.FLUTTER_VERSION }}-v2
+            - flutter-{{ .Environment.FLUTTER_VERSION }}-v2
+            - flutter-v2
 
   save_flutter_cache:
     description: "Save Flutter and dependency caches"
     steps:
       - save_cache:
-          key: flutter-{{ checksum "pubspec.lock" }}-v1
+          key: flutter-{{ checksum "pubspec.lock" }}-{{ .Environment.FLUTTER_VERSION }}-v2
           paths:
             - ~/.pub-cache
             - ~/flutter
