@@ -10,7 +10,7 @@ class LoginForm extends StatefulWidget {
     this.onSubmit,
     this.onCredentialsChanged,
   });
-  
+
   final VoidCallback? onSubmit;
   final void Function(String, String)? onCredentialsChanged;
 
@@ -145,7 +145,9 @@ void main() {
 
       // Act
       await tester.enterText(
-          find.byKey(const Key('email_field')), 'invalid-email',);
+        find.byKey(const Key('email_field')),
+        'invalid-email',
+      );
       await tester.tap(find.byKey(const Key('submit_button')));
       await tester.pumpAndSettle();
 
@@ -165,15 +167,21 @@ void main() {
 
       // Act
       await tester.enterText(
-          find.byKey(const Key('email_field')), 'test@example.com',);
-      await tester.enterText(find.byKey(const Key('password_field')), '123',);
+        find.byKey(const Key('email_field')),
+        'test@example.com',
+      );
+      await tester.enterText(
+        find.byKey(const Key('password_field')),
+        '123',
+      );
       await tester.tap(find.byKey(const Key('submit_button')));
       await tester.pumpAndSettle();
 
       // Assert
       expect(
-          find.text('Password must be at least 6 characters'), 
-          findsOneWidget,);
+        find.text('Password must be at least 6 characters'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('should call onSubmit when form is valid', (tester) async {
@@ -193,9 +201,13 @@ void main() {
 
       // Act
       await tester.enterText(
-          find.byKey(const Key('email_field')), 'test@example.com',);
+        find.byKey(const Key('email_field')),
+        'test@example.com',
+      );
       await tester.enterText(
-          find.byKey(const Key('password_field')), 'password123',);
+        find.byKey(const Key('password_field')),
+        'password123',
+      );
       await tester.tap(find.byKey(const Key('submit_button')));
       await tester.pumpAndSettle();
 
@@ -223,9 +235,13 @@ void main() {
 
       // Act
       await tester.enterText(
-          find.byKey(const Key('email_field')), 'test@example.com',);
+        find.byKey(const Key('email_field')),
+        'test@example.com',
+      );
       await tester.enterText(
-          find.byKey(const Key('password_field')), 'password123',);
+        find.byKey(const Key('password_field')),
+        'password123',
+      );
 
       // Assert
       expect(lastEmail, 'test@example.com');

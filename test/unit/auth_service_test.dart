@@ -16,7 +16,7 @@ abstract class AuthRepository {
 
 class AuthService {
   AuthService(this._repository);
-  
+
   final AuthRepository _repository;
 
   Future<bool> authenticate(String email, String password) async {
@@ -81,8 +81,7 @@ void main() {
 
         // Act & Assert
         expect(
-          () async =>
-              authService.authenticate('email@test.com', 'password'),
+          () async => authService.authenticate('email@test.com', 'password'),
           throwsException,
         );
       });
