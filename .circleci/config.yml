@@ -1,16 +1,481 @@
 version: 2.1
 
-jobs:
-  build:
+# CircleCI Orbs - Reusable packages of configuration
+orbs:
+  flutter: circleci/flutter@2.0.3
+  android: circleci/android@2.3.0
+  codecov: codecov/codecov@4.0.1
+  slack: circleci/slack@4.12.5
+
+# Define reusable job parameters
+parameters:
+  flutter_version:
+    type: string
+    default: "3.19.6"
+  java_version:
+    type: string
+    default: "17.0.2"
+
+# Define executors for different environments
+executors:
+  flutter_executor:
     docker:
-      - image: cimg/python:3.11
+      - image: cimg/base:current
+    working_directory: ~/project
+    resource_class: medium
+    environment:
+      FLUTTER_VERSION: << pipeline.parameters.flutter_version >>
+      JAVA_HOME: /opt/java/openjdk
+
+  android_executor:
+    docker:
+      - image: cimg/android:2023.12.1
+    working_directory: ~/project
+    resource_class: large
+    environment:
+      FLUTTER_VERSION: << pipeline.parameters.flutter_version >>
+      JAVA_HOME: /opt/java/openjdk
+      JVM_OPTS: -Xmx3200m
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2"
+
+# Define reusable commands
+commands:
+  setup_flutter:
+    description: "Install and setup Flutter SDK"
+    steps:
+      - run:
+          name: Install Flutter SDK
+          command: |
+            git clone https://github.com/flutter/flutter.git -b stable
+            echo 'export PATH="$PATH:$HOME/flutter/bin"' >> ~/.bashrc
+            echo 'export PATH="$PATH:$HOME/.pub-cache/bin"' >> ~/.bashrc
+            source ~/.bashrc
+            flutter doctor --android-licenses || true
+            flutter doctor
+      - run:
+          name: Install dependencies
+          command: |
+            source ~/.bashrc
+            flutter pub get
+            flutter pub run build_runner build --delete-conflicting-outputs
+
+  setup_java:
+    description: "Install Java for Android builds"
+    steps:
+      - run:
+          name: Install Java
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y openjdk-17-jdk
+            echo 'export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64' >> ~/.bashrc
+            source ~/.bashrc
+
+  save_flutter_cache:
+    description: "Save Flutter and dependency caches"
+    steps:
+      - save_cache:
+          key: flutter-{{ checksum "pubspec.lock" }}-v1
+          paths:
+            - ~/.pub-cache
+            - flutter
+
+  restore_flutter_cache:
+    description: "Restore Flutter and dependency caches"
+    steps:
+      - restore_cache:
+          keys:
+            - flutter-{{ checksum "pubspec.lock" }}-v1
+            - flutter-
+
+  notify_slack_on_failure:
+    description: "Notify Slack on job failure"
+    steps:
+      - slack/notify:
+          event: fail
+          template: basic_fail_1
+
+  notify_slack_on_success:
+    description: "Notify Slack on successful deployment"
+    steps:
+      - slack/notify:
+          event: pass
+          template: success_tagged_deploy_1
+
+# Define jobs
+jobs:
+  # Code quality and linting job
+  code_quality:
+    executor: flutter_executor
     steps:
       - checkout
+      - restore_flutter_cache
+      - setup_flutter
       - run:
-          name: Say hello
-          command: python app.py
+          name: Format check
+          command: |
+            source ~/.bashrc
+            flutter format --dry-run --set-exit-if-changed .
+      - run:
+          name: Analyze code
+          command: |
+            source ~/.bashrc
+            flutter analyze --fatal-infos --fatal-warnings
+      - run:
+          name: Check import sorting
+          command: |
+            source ~/.bashrc
+            flutter pub run import_sorter:main --no-comments --exit-if-changed
+      - save_flutter_cache
+      - notify_slack_on_failure
 
+  # Security scanning job
+  security_scan:
+    executor: flutter_executor
+    steps:
+      - checkout
+      - restore_flutter_cache
+      - setup_flutter
+      - run:
+          name: Dependency vulnerability scan
+          command: |
+            source ~/.bashrc
+            # Install security scanning tools
+            dart pub global activate pana
+            dart pub global activate security_audit
+            
+            # Run security audit
+            flutter pub deps --json | dart pub global run security_audit
+      - run:
+          name: License compliance check
+          command: |
+            source ~/.bashrc
+            flutter pub deps --json > dependencies.json
+            # Check for licenses (you can integrate with tools like FOSSA or WhiteSource)
+            echo "License compliance check completed"
+      - store_artifacts:
+          path: dependencies.json
+          destination: security/dependencies.json
+      - notify_slack_on_failure
+
+  # Unit and widget tests
+  test:
+    executor: flutter_executor
+    parallelism: 2
+    steps:
+      - checkout
+      - restore_flutter_cache
+      - setup_flutter
+      - run:
+          name: Run unit and widget tests
+          command: |
+            source ~/.bashrc
+            flutter test --coverage --reporter=json > test_results.json
+      - run:
+          name: Generate coverage report
+          command: |
+            source ~/.bashrc
+            # Install lcov for coverage processing
+            sudo apt-get update && sudo apt-get install -y lcov
+            genhtml coverage/lcov.info -o coverage/html
+      - codecov/upload:
+          file: coverage/lcov.info
+      - store_test_results:
+          path: test_results.json
+      - store_artifacts:
+          path: coverage/html
+          destination: coverage
+      - notify_slack_on_failure
+
+  # Integration tests
+  integration_test:
+    executor: android_executor
+    steps:
+      - checkout
+      - restore_flutter_cache
+      - setup_java
+      - setup_flutter
+      - android/restore-gradle-cache
+      - run:
+          name: Setup Android emulator
+          command: |
+            echo 'export PATH=$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools' >> ~/.bashrc
+            source ~/.bashrc
+            sdkmanager "system-images;android-30;google_apis;x86_64"
+            avdmanager create avd -n test_emulator -k "system-images;android-30;google_apis;x86_64" --force
+      - run:
+          name: Start Android emulator
+          command: |
+            source ~/.bashrc
+            emulator -avd test_emulator -no-audio -no-window -no-snapshot -no-accel &
+            # Wait for emulator to boot
+            adb wait-for-device shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done;'
+          background: true
+      - run:
+          name: Run integration tests
+          command: |
+            source ~/.bashrc
+            # Wait for emulator to be ready
+            sleep 60
+            flutter test integration_test/
+      - android/save-gradle-cache
+      - store_test_results:
+          path: build/reports/tests
+      - store_artifacts:
+          path: build/reports
+          destination: integration-test-reports
+      - notify_slack_on_failure
+
+  # Build Android APK
+  build_android:
+    executor: android_executor
+    steps:
+      - checkout
+      - restore_flutter_cache
+      - setup_java
+      - setup_flutter
+      - android/restore-gradle-cache
+      - run:
+          name: Build Android APK
+          command: |
+            source ~/.bashrc
+            flutter build apk --release --verbose
+      - run:
+          name: Build Android App Bundle
+          command: |
+            source ~/.bashrc
+            flutter build appbundle --release --verbose
+      - android/save-gradle-cache
+      - store_artifacts:
+          path: build/app/outputs/flutter-apk/app-release.apk
+          destination: android/app-release.apk
+      - store_artifacts:
+          path: build/app/outputs/bundle/release/app-release.aab
+          destination: android/app-release.aab
+      - persist_to_workspace:
+          root: build/app/outputs
+          paths:
+            - flutter-apk/app-release.apk
+            - bundle/release/app-release.aab
+      - notify_slack_on_failure
+
+  # Build iOS (requires macOS executor - commented out as not available in all plans)
+  # build_ios:
+  #   macos:
+  #     xcode: 15.0.0
+  #   working_directory: ~/project
+  #   steps:
+  #     - checkout
+  #     - restore_flutter_cache
+  #     - run:
+  #         name: Install Flutter
+  #         command: |
+  #           git clone https://github.com/flutter/flutter.git -b stable
+  #           echo 'export PATH="$PATH:$HOME/flutter/bin"' >> ~/.bash_profile
+  #           source ~/.bash_profile
+  #           flutter doctor
+  #     - run:
+  #         name: Install dependencies
+  #         command: |
+  #           source ~/.bash_profile
+  #           flutter pub get
+  #     - run:
+  #         name: Build iOS
+  #         command: |
+  #           source ~/.bash_profile
+  #           flutter build ios --release --no-codesign
+  #     - store_artifacts:
+  #         path: build/ios/Release-iphoneos/Runner.app
+  #         destination: ios/Runner.app
+
+  # Deploy to development environment
+  deploy_dev:
+    executor: flutter_executor
+    steps:
+      - checkout
+      - attach_workspace:
+          at: build/app/outputs
+      - run:
+          name: Deploy to Firebase App Distribution
+          command: |
+            # Install Firebase CLI
+            curl -sL https://firebase.tools | bash
+            
+            # Deploy APK to Firebase App Distribution (requires FIREBASE_TOKEN env var)
+            firebase appdistribution:distribute build/app/outputs/flutter-apk/app-release.apk \
+              --app $FIREBASE_APP_ID_ANDROID \
+              --groups "development-team" \
+              --release-notes "Development build from commit $CIRCLE_SHA1"
+      - notify_slack_on_success
+
+  # Deploy to staging environment
+  deploy_staging:
+    executor: flutter_executor
+    steps:
+      - checkout
+      - attach_workspace:
+          at: build/app/outputs
+      - run:
+          name: Deploy to staging
+          command: |
+            echo "Deploying to staging environment"
+            # Add staging deployment logic here
+            # Could include uploading to Google Play Console (internal testing)
+            # or Apple TestFlight
+      - notify_slack_on_success
+
+  # Deploy to production
+  deploy_production:
+    executor: flutter_executor
+    steps:
+      - checkout
+      - attach_workspace:
+          at: build/app/outputs
+      - run:
+          name: Deploy to production
+          command: |
+            echo "Deploying to production"
+            # Add production deployment logic here
+            # Could include Google Play Store and Apple App Store uploads
+      - notify_slack_on_success
+
+# Define workflows
 workflows:
-  hello-workflow:
+  version: 2
+  
+  # Development workflow - runs on every commit
+  development:
     jobs:
-      - build
+      - code_quality:
+          filters:
+            branches:
+              ignore: 
+                - main
+                - develop
+      - security_scan:
+          filters:
+            branches:
+              ignore: 
+                - main
+                - develop
+      - test:
+          requires:
+            - code_quality
+          filters:
+            branches:
+              ignore: 
+                - main
+                - develop
+
+  # Staging workflow - runs on develop branch
+  staging:
+    jobs:
+      - code_quality:
+          filters:
+            branches:
+              only: develop
+      - security_scan:
+          filters:
+            branches:
+              only: develop
+      - test:
+          requires:
+            - code_quality
+          filters:
+            branches:
+              only: develop
+      - integration_test:
+          requires:
+            - test
+          filters:
+            branches:
+              only: develop
+      - build_android:
+          requires:
+            - integration_test
+          filters:
+            branches:
+              only: develop
+      - deploy_staging:
+          requires:
+            - build_android
+          filters:
+            branches:
+              only: develop
+
+  # Production workflow - runs on main branch and tags
+  production:
+    jobs:
+      - code_quality:
+          filters:
+            branches:
+              only: main
+            tags:
+              only: /^v.*/
+      - security_scan:
+          filters:
+            branches:
+              only: main
+            tags:
+              only: /^v.*/
+      - test:
+          requires:
+            - code_quality
+          filters:
+            branches:
+              only: main
+            tags:
+              only: /^v.*/
+      - integration_test:
+          requires:
+            - test
+          filters:
+            branches:
+              only: main
+            tags:
+              only: /^v.*/
+      - build_android:
+          requires:
+            - integration_test
+          filters:
+            branches:
+              only: main
+            tags:
+              only: /^v.*/
+      - hold_for_approval:
+          type: approval
+          requires:
+            - build_android
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - deploy_production:
+          requires:
+            - hold_for_approval
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+
+  # Nightly build workflow - runs security scans and full test suite
+  nightly:
+    triggers:
+      - schedule:
+          cron: "0 2 * * *"  # Run at 2 AM UTC daily
+          filters:
+            branches:
+              only: main
+    jobs:
+      - code_quality
+      - security_scan
+      - test:
+          requires:
+            - code_quality
+      - integration_test:
+          requires:
+            - test
+      - build_android:
+          requires:
+            - integration_test

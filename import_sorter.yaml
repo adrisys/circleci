@@ -1,0 +1,7 @@
+# Import sorter configuration for enterprise Flutter app
+comments: false
+ignored_files:
+  - /lib/generated_plugin_registrant.dart
+  - \/lib\/.*\.g\.dart$
+  - \/lib\/.*\.gr\.dart$
+  - \/lib\/.*\.freezed\.dart$
