@@ -26,6 +26,9 @@ commands:
       - run:
           name: Install dependencies
           command: flutter pub get
+      - run:
+          name: Generate mocks and other files
+          command: dart run build_runner build --delete-conflicting-outputs
 
   restore_flutter_cache:
     description: "Restore Flutter and dependency caches"
