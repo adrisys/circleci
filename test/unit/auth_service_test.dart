@@ -66,7 +66,8 @@ void main() {
             .thenAnswer((_) async => true);
 
         // Act
-        final result = await authService.authenticate('email@test.com', 'password');
+        final result =
+            await authService.authenticate('email@test.com', 'password');
 
         // Assert
         expect(result, true);
@@ -80,7 +81,8 @@ void main() {
 
         // Act & Assert
         expect(
-          () async => await authService.authenticate('email@test.com', 'password'),
+          () async =>
+              await authService.authenticate('email@test.com', 'password'),
           throwsException,
         );
       });

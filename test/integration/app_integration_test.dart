@@ -106,7 +106,7 @@ void main() {
       // Test login functionality
       await tester.tap(find.byKey(const Key('login_button')));
       await tester.pumpAndSettle();
-      
+
       // Verify login state
       expect(find.byKey(const Key('welcome_message')), findsOneWidget);
       expect(find.text('Welcome! You are logged in.'), findsOneWidget);
@@ -115,7 +115,7 @@ void main() {
       // Test logout functionality
       await tester.tap(find.byKey(const Key('login_button')));
       await tester.pumpAndSettle();
-      
+
       // Verify logout state
       expect(find.byKey(const Key('welcome_message')), findsNothing);
       expect(find.text('Login'), findsOneWidget);
@@ -125,7 +125,7 @@ void main() {
         await tester.tap(find.byKey(const Key('increment_button')));
         await tester.pumpAndSettle();
       }
-      
+
       expect(find.text('6'), findsOneWidget); // 1 from earlier + 5 more
     });
 

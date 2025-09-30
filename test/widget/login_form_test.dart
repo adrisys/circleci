@@ -53,7 +53,8 @@ class _LoginFormState extends State<LoginForm> {
               return null;
             },
             onChanged: (value) {
-              widget.onCredentialsChanged?.call(value, _passwordController.text);
+              widget.onCredentialsChanged
+                  ?.call(value, _passwordController.text);
             },
           ),
           const SizedBox(height: 16),
@@ -112,7 +113,8 @@ void main() {
       expect(find.byKey(const Key('submit_button')), findsOneWidget);
     });
 
-    testWidgets('should show validation errors for empty fields', (tester) async {
+    testWidgets('should show validation errors for empty fields',
+        (tester) async {
       // Arrange
       await tester.pumpWidget(
         const MaterialApp(
@@ -142,7 +144,8 @@ void main() {
       );
 
       // Act
-      await tester.enterText(find.byKey(const Key('email_field')), 'invalid-email');
+      await tester.enterText(
+          find.byKey(const Key('email_field')), 'invalid-email');
       await tester.tap(find.byKey(const Key('submit_button')));
       await tester.pumpAndSettle();
 
@@ -161,13 +164,15 @@ void main() {
       );
 
       // Act
-      await tester.enterText(find.byKey(const Key('email_field')), 'test@example.com');
+      await tester.enterText(
+          find.byKey(const Key('email_field')), 'test@example.com');
       await tester.enterText(find.byKey(const Key('password_field')), '123');
       await tester.tap(find.byKey(const Key('submit_button')));
       await tester.pumpAndSettle();
 
       // Assert
-      expect(find.text('Password must be at least 6 characters'), findsOneWidget);
+      expect(
+          find.text('Password must be at least 6 characters'), findsOneWidget);
     });
 
     testWidgets('should call onSubmit when form is valid', (tester) async {
@@ -186,8 +191,10 @@ void main() {
       );
 
       // Act
-      await tester.enterText(find.byKey(const Key('email_field')), 'test@example.com');
-      await tester.enterText(find.byKey(const Key('password_field')), 'password123');
+      await tester.enterText(
+          find.byKey(const Key('email_field')), 'test@example.com');
+      await tester.enterText(
+          find.byKey(const Key('password_field')), 'password123');
       await tester.tap(find.byKey(const Key('submit_button')));
       await tester.pumpAndSettle();
 
@@ -195,7 +202,8 @@ void main() {
       expect(submitCalled, true);
     });
 
-    testWidgets('should call onCredentialsChanged when text changes', (tester) async {
+    testWidgets('should call onCredentialsChanged when text changes',
+        (tester) async {
       // Arrange
       String? lastEmail;
       String? lastPassword;
@@ -213,8 +221,10 @@ void main() {
       );
 
       // Act
-      await tester.enterText(find.byKey(const Key('email_field')), 'test@example.com');
-      await tester.enterText(find.byKey(const Key('password_field')), 'password123');
+      await tester.enterText(
+          find.byKey(const Key('email_field')), 'test@example.com');
+      await tester.enterText(
+          find.byKey(const Key('password_field')), 'password123');
 
       // Assert
       expect(lastEmail, 'test@example.com');
