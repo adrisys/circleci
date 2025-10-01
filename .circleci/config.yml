@@ -212,12 +212,13 @@ jobs:
       - run:
           name: Run orb-based unit tests
           command: flutter test
-      - slack/notify:
-          event: fail
-          template: basic_fail_1
-      - slack/notify:
-          event: pass
-          template: success_tagged_deployment_1
+      # Slack notifications temporarily disabled
+      # - slack/notify:
+      #     event: fail
+      #     template: basic_fail_1
+      # - slack/notify:
+      #     event: pass
+      #     template: success_tagged_deployment_1
 
 # Define workflows
 workflows:
