@@ -35,6 +35,9 @@ commands:
             echo "Installing CMake and NDK for native builds..."
             sudo apt-get update && sudo apt-get install -y ninja-build
             
+            # Create a symbolic link to ninja in a location where CMake can find it
+            sudo ln -sf /usr/bin/ninja-build /usr/bin/ninja
+            
             # Install CMake and NDK via sdkmanager
             echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "cmake;3.22.1" || true
             echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;25.1.8937393" || true
@@ -42,8 +45,16 @@ commands:
             # Set environment variables for CMake and NDK
             echo 'export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/25.1.8937393"' >> $BASH_ENV
             echo 'export CMAKE_HOME="$ANDROID_HOME/cmake/3.22.1"' >> $BASH_ENV
-            echo 'export PATH="$PATH:$CMAKE_HOME/bin"' >> $BASH_ENV
+            echo 'export PATH="$PATH:$CMAKE_HOME/bin:/usr/bin"' >> $BASH_ENV
             source $BASH_ENV
+            
+            # Verify ninja is installed and can be found
+            which ninja || echo "Ninja not found in PATH"
+            
+            # Also ensure ninja is available in CMake bin directory
+            if [ -d "$ANDROID_HOME/cmake/3.22.1/bin" ]; then
+              sudo ln -sf /usr/bin/ninja $ANDROID_HOME/cmake/3.22.1/bin/ninja || true
+            fi
       - run:
           name: Install dependencies
           command: |
@@ -119,6 +130,17 @@ jobs:
           name: Build Android APK
           command: |
             echo "Building Android APK..."
+            
+            # Debug information for troubleshooting
+            echo "=== Debug Information ==="
+            echo "Ninja location: $(which ninja || echo 'not found')"
+            echo "CMake location: $(which cmake || echo 'not found')"
+            echo "CMAKE_HOME: $CMAKE_HOME"
+            echo "ANDROID_HOME: $ANDROID_HOME"
+            echo "PATH: $PATH"
+            ls -la $ANDROID_HOME/cmake/3.22.1/bin/ || echo "CMake bin directory not found"
+            echo "========================="
+            
             # Try normal build first
             flutter build apk --release || {
               echo "Normal build failed, trying without native code optimization..."
