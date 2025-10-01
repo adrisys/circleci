@@ -1,5 +1,10 @@
 version: 2.1
 
+# Import orbs
+orbs:
+  flutter: circleci/flutter@3.0.0
+  slack: circleci/slack@6.0.0
+
 # Define executors for different environments
 executors:
   flutter_executor:
@@ -186,6 +191,34 @@ jobs:
           destination: android/app-release.apk
       - save_flutter_cache
 
+  # Test Flutter orb - lint job
+  orb_lint:
+    docker:
+      - image: ghcr.io/cirruslabs/flutter:stable
+    steps:
+      - checkout
+      - flutter/install_pub
+      - run:
+          name: Run orb-based static analysis
+          command: flutter analyze lib
+
+  # Test Flutter orb - unit test job
+  orb_unit_test:
+    docker:
+      - image: ghcr.io/cirruslabs/flutter:stable
+    steps:
+      - checkout
+      - flutter/install_pub
+      - run:
+          name: Run orb-based unit tests
+          command: flutter test
+      - slack/notify:
+          event: fail
+          template: basic_fail_1
+      - slack/notify:
+          event: pass
+          template: success_tagged_deployment_1
+
 # Define workflows
 workflows:
   version: 2
@@ -205,3 +238,12 @@ workflows:
               only:
                 - main
                 - develop
+  
+  # Orb testing workflow
+  orb_test:
+    jobs:
+      - orb_lint
+      - orb_unit_test:
+          requires:
+            - orb_lint
+          context: slack-secrets  # You'll need to set up Slack context for notifications
