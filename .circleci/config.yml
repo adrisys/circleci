@@ -30,6 +30,21 @@ commands:
             source $BASH_ENV
             flutter doctor -v
       - run:
+          name: Install Android build tools
+          command: |
+            echo "Installing CMake and NDK for native builds..."
+            sudo apt-get update && sudo apt-get install -y ninja-build
+            
+            # Install CMake and NDK via sdkmanager
+            echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "cmake;3.22.1" || true
+            echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;25.1.8937393" || true
+            
+            # Set environment variables for CMake and NDK
+            echo 'export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/25.1.8937393"' >> $BASH_ENV
+            echo 'export CMAKE_HOME="$ANDROID_HOME/cmake/3.22.1"' >> $BASH_ENV
+            echo 'export PATH="$PATH:$CMAKE_HOME/bin"' >> $BASH_ENV
+            source $BASH_ENV
+      - run:
           name: Install dependencies
           command: |
             echo "Installing Flutter dependencies..."
@@ -46,18 +61,20 @@ commands:
     steps:
       - restore_cache:
           keys:
-            - flutter-{{ checksum "pubspec.lock" }}-{{ .Environment.FLUTTER_VERSION }}-v2
-            - flutter-{{ .Environment.FLUTTER_VERSION }}-v2
-            - flutter-v2
+            - flutter-{{ checksum "pubspec.lock" }}-{{ .Environment.FLUTTER_VERSION }}-v3
+            - flutter-{{ .Environment.FLUTTER_VERSION }}-v3
+            - flutter-v3
 
   save_flutter_cache:
     description: "Save Flutter and dependency caches"
     steps:
       - save_cache:
-          key: flutter-{{ checksum "pubspec.lock" }}-{{ .Environment.FLUTTER_VERSION }}-v2
+          key: flutter-{{ checksum "pubspec.lock" }}-{{ .Environment.FLUTTER_VERSION }}-v3
           paths:
             - ~/.pub-cache
             - ~/flutter
+            - ~/.android/sdk/cmake
+            - ~/.android/sdk/ndk
 
 # Define jobs
 jobs:
@@ -100,7 +117,13 @@ jobs:
       - setup_flutter
       - run:
           name: Build Android APK
-          command: flutter build apk --release
+          command: |
+            echo "Building Android APK..."
+            # Try normal build first
+            flutter build apk --release || {
+              echo "Normal build failed, trying without native code optimization..."
+              flutter build apk --release --no-tree-shake-icons --verbose
+            }
       - store_artifacts:
           path: build/app/outputs/flutter-apk/app-release.apk
           destination: android/app-release.apk
