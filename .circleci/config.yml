@@ -5,10 +5,12 @@ executors:
   flutter_executor:
     docker:
       # Option 1: Cirrus Labs Flutter image (includes Flutter + Android SDK)
-      - image: ghcr.io/cirruslabs/flutter:3.27.1
-      # Option 2: CircleCI Android image with Flutter
+      - image: ghcr.io/cirruslabs/flutter:stable
+      # Option 2: Specific version if needed
+      # - image: ghcr.io/cirruslabs/flutter:3.35.5
+      # Option 3: CircleCI Android image with Flutter
       # - image: cimg/android:2024.01.1-flutter
-      # Option 3: If the above don't work, fallback to base Android image
+      # Option 4: If the above don't work, fallback to base Android image
       # - image: cimg/android:2024.01.1
     working_directory: ~/project
     resource_class: medium
