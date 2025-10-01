@@ -4,77 +4,72 @@ version: 2.1
 executors:
   flutter_executor:
     docker:
-      - image: cimg/android:2023.12.1
+      # Option 1: Cirrus Labs Flutter image (includes Flutter + Android SDK)
+      - image: ghcr.io/cirruslabs/flutter:3.27.1
+      # Option 2: CircleCI Android image with Flutter
+      # - image: cimg/android:2024.01.1-flutter
+      # Option 3: If the above don't work, fallback to base Android image
+      # - image: cimg/android:2024.01.1
     working_directory: ~/project
     resource_class: medium
-    environment:
-      FLUTTER_VERSION: "3.27.1"
 
 # Define reusable commands
 commands:
   setup_flutter:
-    description: "Install and setup Flutter SDK"
+    description: "Setup Flutter dependencies and build tools"
     steps:
       - run:
-          name: Install Flutter SDK
+          name: Verify Flutter and setup build tools
           command: |
-            if [ ! -d "$HOME/flutter" ]; then
-              echo "Installing Flutter SDK..."
-              git clone https://github.com/flutter/flutter.git -b stable ~/flutter
-            else
-              echo "Flutter SDK already exists, updating..."
-              cd ~/flutter && git pull origin stable
-            fi
-            echo 'export PATH="$PATH:$HOME/flutter/bin"' >> $BASH_ENV
+            echo "Verifying Flutter installation..."
+            flutter --version
+            flutter doctor -v
+            
+            echo "Setting up pub cache path..."
             echo 'export PATH="$PATH:$HOME/.pub-cache/bin"' >> $BASH_ENV
             source $BASH_ENV
-            flutter doctor -v
       - run:
-          name: Install Android build tools
+          name: Setup Android build tools
           command: |
-            echo "Installing CMake and NDK for native builds..."
+            echo "Setting up Android build tools for native compilation..."
+            
+            # Install ninja build system (required for CMake)
             sudo apt-get update && sudo apt-get install -y ninja-build cmake
             
-            # Create a symbolic link to ninja in a location where CMake can find it
-            sudo ln -sf /usr/bin/ninja-build /usr/bin/ninja
+            # Create ninja symlink
+            sudo ln -sf /usr/bin/ninja-build /usr/bin/ninja || true
             
-            # Install CMake and NDK via sdkmanager
-            echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "cmake;3.22.1" || true
-            echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;26.1.10909125" || true
-            
-            # Set environment variables for CMake and NDK
-            echo 'export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"' >> $BASH_ENV
-            echo 'export CMAKE_HOME="$ANDROID_HOME/cmake/3.22.1"' >> $BASH_ENV
-            echo 'export PATH="$PATH:$CMAKE_HOME/bin:/usr/bin"' >> $BASH_ENV
-            source $BASH_ENV
-            
-            # Wait for SDK manager operations to complete
-            sleep 5
-            
-            # Verify ninja is installed and can be found
-            ninja --version || echo "Ninja version check failed"
-            which ninja || echo "Ninja not found in PATH"
-            
-            # Ensure ninja is available in CMake bin directory and set proper permissions
-            if [ -d "$ANDROID_HOME/cmake/3.22.1/bin" ]; then
-              sudo cp /usr/bin/ninja $ANDROID_HOME/cmake/3.22.1/bin/ninja || true
-              sudo chmod +x $ANDROID_HOME/cmake/3.22.1/bin/ninja || true
+            # Verify existing Android SDK components
+            if [ -n "$ANDROID_HOME" ] && [ -d "$ANDROID_HOME" ]; then
+              echo "Android SDK found at: $ANDROID_HOME"
+              
+              # Install/verify CMake and NDK if needed
+              $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "cmake;3.22.1" "ndk;26.1.10909125" || {
+                echo "Using pre-installed SDK components"
+              }
+              
+              # Set up environment variables
+              if [ -d "$ANDROID_HOME/ndk"* ]; then
+                NDK_PATH=$(find $ANDROID_HOME/ndk -maxdepth 1 -type d | tail -1)
+                echo "export ANDROID_NDK_HOME=$NDK_PATH" >> $BASH_ENV
+              fi
+              
+              if [ -d "$ANDROID_HOME/cmake"* ]; then
+                CMAKE_PATH=$(find $ANDROID_HOME/cmake -maxdepth 1 -type d | tail -1)
+                echo "export CMAKE_HOME=$CMAKE_PATH" >> $BASH_ENV
+                echo "export PATH=$CMAKE_PATH/bin:$PATH" >> $BASH_ENV
+              fi
             fi
             
-            # Also add the CMake's ninja to system PATH if it exists
-            if [ -f "$ANDROID_HOME/cmake/3.22.1/bin/ninja" ]; then
-              echo 'export PATH="$ANDROID_HOME/cmake/3.22.1/bin:$PATH"' >> $BASH_ENV
-            fi
-            
-            # Set CMAKE_MAKE_PROGRAM to explicitly tell CMake where ninja is
-            echo 'export CMAKE_MAKE_PROGRAM="/usr/bin/ninja"' >> $BASH_ENV
-            
-            # Alternative: create a wrapper script to ensure ninja is found
-            sudo mkdir -p /usr/local/bin
-            sudo ln -sf /usr/bin/ninja /usr/local/bin/ninja
-            echo 'export PATH="/usr/local/bin:$PATH"' >> $BASH_ENV
+            # Ensure ninja is available
+            echo "export CMAKE_MAKE_PROGRAM=/usr/bin/ninja" >> $BASH_ENV
+            echo "export PATH=/usr/bin:$PATH" >> $BASH_ENV
             
             source $BASH_ENV
+            
+            # Verify tools
+            echo "Ninja: $(which ninja && ninja --version || echo 'not found')"
+            echo "CMake: $(which cmake && cmake --version | head -1 || echo 'not found')"
       - run:
           name: Install dependencies
           command: |
@@ -108,20 +103,16 @@ commands:
     steps:
       - restore_cache:
           keys:
-            - flutter-{{ checksum "pubspec.lock" }}-{{ .Environment.FLUTTER_VERSION }}-v3
-            - flutter-{{ .Environment.FLUTTER_VERSION }}-v3
-            - flutter-v3
+            - flutter-deps-{{ checksum "pubspec.lock" }}-v4
+            - flutter-deps-v4
 
   save_flutter_cache:
     description: "Save Flutter and dependency caches"
     steps:
       - save_cache:
-          key: flutter-{{ checksum "pubspec.lock" }}-{{ .Environment.FLUTTER_VERSION }}-v3
+          key: flutter-deps-{{ checksum "pubspec.lock" }}-v4
           paths:
             - ~/.pub-cache
-            - ~/flutter
-            - ~/.android/sdk/cmake
-            - ~/.android/sdk/ndk
 
 # Define jobs
 jobs:
